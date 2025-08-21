@@ -27,6 +27,9 @@ def create_index() -> None:
     embedding_model = BedrockEmbeddings(
         client=client,
         model_id="amazon.titan-embed-text-v2:0",
+        model_kwargs={
+            "embeddingTypes": ["binary"],
+        },
     )
 
     embeddings = []
