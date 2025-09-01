@@ -367,6 +367,7 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-aws" },
     { name = "mcpi" },
+    { name = "mcrcon" },
     { name = "numpy" },
     { name = "tqdm" },
 ]
@@ -378,6 +379,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=0.3.27" },
     { name = "langchain-aws", specifier = ">=0.2.30" },
     { name = "mcpi", specifier = ">=1.2.1" },
+    { name = "mcrcon", specifier = ">=0.7.0" },
     { name = "numpy", specifier = ">=2.3.2" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
@@ -390,6 +392,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/80/df/87ad3ce4794d30df3
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/9c/6dd915a602400449c5ee8aaecfe2b00d6e79dd608cb2914d3dff8a1ee6fe/mcpi-1.2.1-py3-none-any.whl", hash = "sha256:2f9cd8d40ab0935cb5a92c8aeb65f9056a9d1b05d5a20c8ce93766aa053c8356", size = 11243, upload-time = "2021-10-31T10:31:21.304Z" },
 ]
+
+[[package]]
+name = "mcrcon"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/48/6aa55387b45cb8f8c69c4034b3438bb5c5b89e45d975ff60539e9ae7d8b7/mcrcon-0.7.0.tar.gz", hash = "sha256:c2f1caf2467e283e0ccd2436f1ce21f04242b03c5fafb3860e3924d764a910d4", size = 4219, upload-time = "2021-07-30T06:59:32.832Z" }
 
 [[package]]
 name = "numpy"

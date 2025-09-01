@@ -10,6 +10,7 @@ dependencies = [
     "langchain>=0.3.27",
     "langchain-aws>=0.2.30",
     "mcpi>=1.2.1",
+    "mcrcon>=0.7.0",
     "numpy>=2.3.2",
     "tqdm>=4.67.1",
 ]

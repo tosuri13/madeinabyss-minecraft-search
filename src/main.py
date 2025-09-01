@@ -1,5 +1,9 @@
+import json
 import os
+import re
+import time
 from pathlib import Path
+from string import Template
 
 import boto3
 import faiss
@@ -8,6 +12,7 @@ from langchain_aws import BedrockEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
 from mcpi import block as Block
 from mcpi.minecraft import Minecraft
+from mcrcon import MCRcon
 from tqdm import tqdm
 
 from mappings import BLOCK_MAPPING, REVERSE_BLOCK_MAPPING
@@ -21,16 +26,25 @@ class MinecraftVectorStore:
     def __init__(
         self,
         host: str,
-        port: int = 4711,
+        password: str,
+        mc_port: int = 4711,
+        mcr_port: int = 25575,
         ox: int = DEFAULT_ORIGIN_X,
         oy: int = DEFAULT_ORIGIN_Y,
         oz: int = DEFAULT_ORIGIN_Z,
     ):
-        self.mc = Minecraft.create(host, port)
+        self.mc = Minecraft.create(host, mc_port)
+        self.mcr = MCRcon(host, password, mcr_port)
+        self.mcr.connect()
+
         self.ox = ox
         self.oy = oy
         self.oz = oz
         self.index = None
+
+        commands_path = Path(__file__).parent / "commands"
+        with open(commands_path / "setDropper.mcfunction") as f:
+            self.set_dropper_command_template = Template(f.read())
 
     def build(self, chunks: list[str]):
         client = boto3.client("bedrock-runtime", "us-east-1")
@@ -82,6 +96,23 @@ class MinecraftVectorStore:
                     id,
                     data,
                 )
+
+            time.sleep(1)
+
+            # NOTE: ガラスの土台の角にチャンクを格納するドロッパーを配置する
+            command = self.set_dropper_command_template.substitute(
+                x=self.ox + x_grid,
+                y=self.oy + y_grid,
+                z=self.oz + z_grid,
+                tag=json.dumps(
+                    {
+                        "title": f"Chunk {i + 1}",
+                        "pages": [re.sub(r"\s+", "", chunk)],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            self.mcr.command(command)
 
         print("● Success to create index.")
 
@@ -147,12 +178,15 @@ if __name__ == "__main__":
     source = Path("assets/source.txt").read_text()
 
     splitter = MarkdownTextSplitter(
-        chunk_size=1024,
-        chunk_overlap=256,
+        chunk_size=256,
+        chunk_overlap=0,
     )
-    chunks = splitter.split_text(source)[:10]
+    chunks = splitter.split_text(source)[:5]
 
-    mvc = MinecraftVectorStore(os.environ["MINECRAFT_HOST"])
+    mvc = MinecraftVectorStore(
+        host=os.environ["MINECRAFT_HOST"],
+        password=os.environ["MINECRAFT_PASSWORD"],
+    )
     mvc.build(chunks)
 
     # mvc.load()
