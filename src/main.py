@@ -7,6 +7,7 @@ from string import Template
 
 import boto3
 import faiss
+import nbtlib
 import numpy as np
 from langchain_aws import BedrockEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
@@ -40,13 +41,20 @@ class MinecraftVectorStore:
         self.ox = ox
         self.oy = oy
         self.oz = oz
+
+        self.chunks = []
         self.index = None
 
         commands_path = Path(__file__).parent / "commands"
         with open(commands_path / "setDropper.mcfunction") as f:
             self.set_dropper_command_template = Template(f.read())
 
+        with open(commands_path / "getDropperData.mcfunction") as f:
+            self.get_dropper_data_command_template = Template(f.read())
+
     def build(self, chunks: list[str]):
+        self.chunks = chunks
+
         client = boto3.client("bedrock-runtime", "us-east-1")
         embedding_model = BedrockEmbeddings(
             client=client,
@@ -120,6 +128,7 @@ class MinecraftVectorStore:
         print("● Loading index from your Minecraft World...")
 
         i = 0
+        chunks = []
         vectors = []
 
         while True:
@@ -130,14 +139,29 @@ class MinecraftVectorStore:
             x_grid = ((i // 8) % 8) * (32 + gap)
             z_grid = (i // 64) * (32 + gap)
 
-            # NOTE: ガラスブロックの有無でチャンクが存在するかどうか判定する
+            # NOTE: ドロッパーの有無でチャンクが存在するかどうか判定する
             id = self.mc.getBlock(
                 self.ox + x_grid,
                 self.oy + y_grid,
                 self.oz + z_grid,
             )
-            if id != Block.GLASS.id:
+            if id != 158:
                 break
+
+            # NOTE: チャンクが格納されているドロッパーの情報を読み取る
+            command = self.get_dropper_data_command_template.substitute(
+                x=self.ox + x_grid,
+                y=self.oy + y_grid,
+                z=self.oz + z_grid,
+            )
+            response = self.mcr.command(command)
+
+            prefix = "The data tag did not change: "
+            nbt = nbtlib.parse_nbt(response.replace(prefix, ""))
+
+            pages = nbt["Items"][0]["tag"]["pages"]
+            chunk = "".join([str(page) for page in pages])
+            chunks.append(chunk)
 
             # NOTE: ブロックの集合から元のベクトルを復元する
             comps = []
@@ -155,15 +179,16 @@ class MinecraftVectorStore:
 
             comps = np.array(comps, dtype=np.uint8)
             comps = np.frombuffer(comps.tobytes(), dtype=np.float32)
-
             vectors.append(comps)
+
             i += 1
 
-        if not vectors:
-            print("🚨 No valid vectors found in the world.")
+        if not chunks or not vectors or len(vectors) != len(chunks):
+            print("🚨 No valid index found in the world.")
             print("\t└─ Please run the build method first to create the index.")
             return
 
+        self.chunks = chunks
         self.index = faiss.IndexFlatL2(256)
         self.index.add(np.array(vectors, dtype=np.float32))  # type: ignore
 
@@ -175,20 +200,21 @@ class MinecraftVectorStore:
 
 
 if __name__ == "__main__":
-    source = Path("assets/source.txt").read_text()
+    # source = Path("assets/source.txt").read_text()
 
-    splitter = MarkdownTextSplitter(
-        chunk_size=256,
-        chunk_overlap=0,
-    )
-    chunks = splitter.split_text(source)[:5]
+    # splitter = MarkdownTextSplitter(
+    #     chunk_size=256,
+    #     chunk_overlap=0,
+    # )
+    # chunks = splitter.split_text(source)[:3]
 
     mvc = MinecraftVectorStore(
         host=os.environ["MINECRAFT_HOST"],
         password=os.environ["MINECRAFT_PASSWORD"],
     )
-    mvc.build(chunks)
+    # mvc.build(chunks)
 
-    # mvc.load()
+    mvc.load()
     # vector = mvc.get_vector(0)
     # print(vector)
+    print(mvc.chunks)
