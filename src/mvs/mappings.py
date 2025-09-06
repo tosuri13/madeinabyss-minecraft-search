@@ -1,4 +1,4 @@
-BLOCK_MAPPING = {
+MVS_BLOCK_MAP = {
     0: (1, 0),  # Stone
     1: (2, 0),  # Grass Block
     2: (3, 0),  # Dirt
@@ -257,6 +257,4 @@ BLOCK_MAPPING = {
     255: (218, 0),  # Observer
 }
 
-REVERSE_BLOCK_MAPPING = {
-    (id, data): byte_val for byte_val, (id, data) in BLOCK_MAPPING.items()
-}
+MVS_BLOCK_RMAP = {(id, data): num for num, (id, data) in MVS_BLOCK_MAP.items()}

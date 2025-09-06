@@ -7,13 +7,19 @@ requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.40.4",
     "faiss-cpu>=1.11.0.post1",
-    "langchain>=0.3.27",
-    "langchain-aws>=0.2.30",
     "mcpi>=1.2.1",
     "mcrcon>=0.7.0",
     "nbtlib>=2.0.4",
     "numpy>=2.3.2",
     "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "chonkie>=1.2.1",
+    "questionary>=2.1.1",
+    "requests>=2.32.5",
+    "strands-agents>=1.7.1",
 ]
 
 [build-system]

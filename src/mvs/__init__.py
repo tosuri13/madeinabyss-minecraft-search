@@ -1,4 +1,4 @@
-from .mappings import BLOCK_MAPPING, REVERSE_BLOCK_MAPPING
+from .mappings import MVS_BLOCK_MAP, MVS_BLOCK_RMAP
 from .mvs import MinecraftVectorStore
 
-__all__ = ["MinecraftVectorStore", "BLOCK_MAPPING", "REVERSE_BLOCK_MAPPING"]
+__all__ = ["MinecraftVectorStore", "MVS_BLOCK_MAP", "MVS_BLOCK_RMAP"]

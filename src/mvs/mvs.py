@@ -8,13 +8,12 @@ import boto3
 import faiss
 import nbtlib
 import numpy as np
-from langchain_aws import BedrockEmbeddings
 from mcpi import block as Block
 from mcpi.minecraft import Minecraft
 from mcrcon import MCRcon
 from tqdm import tqdm
 
-from .mappings import BLOCK_MAPPING, REVERSE_BLOCK_MAPPING
+from .mappings import MVS_BLOCK_MAP, MVS_BLOCK_RMAP
 
 DEFAULT_ORIGIN_X = 0
 DEFAULT_ORIGIN_Y = 50
@@ -39,15 +38,7 @@ class MinecraftVectorStore:
         self.mcrcon = MCRcon(host, password, mcrcon_port)
         self.mcrcon.connect()
 
-        client = boto3.client("bedrock-runtime", "us-east-1")
-        self.embedding_model = BedrockEmbeddings(
-            client=client,
-            model_id="amazon.titan-embed-text-v2:0",
-            model_kwargs={
-                "dimensions": 256,
-                "embeddingTypes": ["float"],
-            },
-        )
+        self.bedrock_client = boto3.client("bedrock-runtime", "us-east-1")
 
         self.ox = ox
         self.oy = oy
@@ -63,12 +54,26 @@ class MinecraftVectorStore:
         with open(mcfunctions_path / "getDropperData.mcfunction") as f:
             self.get_dropper_data_command_template = Template(f.read())
 
+    def _embed(self, query: str):
+        response = self.bedrock_client.invoke_model(
+            modelId="amazon.titan-embed-text-v2:0",
+            body=json.dumps(
+                {
+                    "inputText": query,
+                    "dimensions": 256,
+                }
+            ),
+        )
+        response = json.loads(response["body"].read())
+
+        return response["embedding"]
+
     def build(self, chunks: list[str]):
         self.chunks = chunks
 
         print("● Creating vectors...")
 
-        vectors = [self.embedding_model.embed_query(chunk) for chunk in tqdm(chunks)]
+        vectors = [self._embed(chunk) for chunk in tqdm(chunks)]
         vectors = np.array(vectors, dtype=np.float32)
 
         self.index = faiss.IndexFlatL2(256)
@@ -97,7 +102,7 @@ class MinecraftVectorStore:
             # NOTE: ベクトルを構成するバイト列ごとに対応するブロックを配置する
             comps = vectors[i].tobytes()
             for j, comp in enumerate(comps):
-                id, data = BLOCK_MAPPING[comp]
+                id, data = MVS_BLOCK_MAP[comp]
                 self.mcpi.setBlock(
                     self.ox + x_grid + j % 32,
                     self.oy + y_grid + 1,
@@ -176,7 +181,7 @@ class MinecraftVectorStore:
                     self.oy + y_grid + 1,
                     self.oz + z_grid + z,
                 )
-                comp = REVERSE_BLOCK_MAPPING[(block.id, block.data)]
+                comp = MVS_BLOCK_RMAP[(block.id, block.data)]
                 comps.append(comp)
 
             comps = np.array(comps, dtype=np.uint8)
@@ -206,8 +211,7 @@ class MinecraftVectorStore:
         return id != DROPPER.id
 
     def retrieve(self, query: str, k: int) -> list[str]:
-        embedding = self.embedding_model.embed_query(query)
-        embedding = np.array([embedding], dtype="float32")
-
+        embedding = np.array([self._embed(query)], dtype="float32")
         _, indices = self.index.search(embedding, k=k)  # type: ignore
+
         return [self.chunks[i] for i in indices[0]]
