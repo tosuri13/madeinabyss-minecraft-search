@@ -1,5 +1,4 @@
 BLOCK_MAPPING = {
-    # 基本ブロック系 (0-15)
     0: (1, 0),  # Stone
     1: (2, 0),  # Grass Block
     2: (3, 0),  # Dirt
@@ -16,7 +15,6 @@ BLOCK_MAPPING = {
     13: (174, 0),  # Packed Ice
     14: (78, 0),  # Snow Layer
     15: (172, 0),  # Terracotta
-    # 木材系 (16-31)
     16: (5, 0),  # Oak Wood Planks
     17: (5, 1),  # Spruce Wood Planks
     18: (5, 2),  # Birch Wood Planks
@@ -33,7 +31,6 @@ BLOCK_MAPPING = {
     29: (58, 0),  # Crafting Table
     30: (170, 0),  # Hay Bale
     31: (216, 0),  # Bone Block
-    # 鉱石系 (32-47)
     32: (14, 0),  # Gold Ore
     33: (15, 0),  # Iron Ore
     34: (16, 0),  # Coal Ore
@@ -50,7 +47,6 @@ BLOCK_MAPPING = {
     45: (152, 0),  # Block of Redstone
     46: (133, 0),  # Block of Emerald
     47: (155, 0),  # Block of Quartz
-    # 石系 (48-63)
     48: (24, 0),  # Sandstone
     49: (24, 1),  # Chiseled Sandstone
     50: (24, 2),  # Smooth Sandstone
@@ -67,7 +63,6 @@ BLOCK_MAPPING = {
     61: (155, 1),  # Chiseled Quartz Block
     62: (155, 2),  # Pillar Quartz Block
     63: (139, 0),  # Cobblestone Wall
-    # ハーフブロック・階段系 (64-95)
     64: (44, 0),  # Stone Slab
     65: (44, 1),  # Sandstone Slab
     66: (44, 2),  # Wooden Slab
@@ -100,7 +95,6 @@ BLOCK_MAPPING = {
     93: (203, 0),  # Purpur Stairs
     94: (43, 0),  # Double Stone Slab
     95: (125, 0),  # Double Wooden Slab
-    # 羊毛系 (96-111)
     96: (35, 0),  # White Wool
     97: (35, 1),  # Orange Wool
     98: (35, 2),  # Magenta Wool
@@ -117,7 +111,6 @@ BLOCK_MAPPING = {
     109: (35, 13),  # Green Wool
     110: (35, 14),  # Red Wool
     111: (35, 15),  # Black Wool
-    # カーペット系 (112-127)
     112: (171, 0),  # White Carpet
     113: (171, 1),  # Orange Carpet
     114: (171, 2),  # Magenta Carpet
@@ -134,7 +127,6 @@ BLOCK_MAPPING = {
     125: (171, 13),  # Green Carpet
     126: (171, 14),  # Red Carpet
     127: (171, 15),  # Black Carpet
-    # ガラス系 (128-159)
     128: (20, 0),  # Glass
     129: (95, 0),  # White Stained Glass
     130: (95, 1),  # Orange Stained Glass
@@ -167,7 +159,6 @@ BLOCK_MAPPING = {
     157: (160, 11),  # Blue Stained Glass Pane
     158: (160, 12),  # Brown Stained Glass Pane
     159: (160, 13),  # Green Stained Glass Pane
-    # 染色粘土・テラコッタ系 (160-191)
     160: (159, 0),  # White Stained Terracotta
     161: (159, 1),  # Orange Stained Terracotta
     162: (159, 2),  # Magenta Stained Terracotta
@@ -200,7 +191,6 @@ BLOCK_MAPPING = {
     189: (248, 0),  # Green Glazed Terracotta
     190: (249, 0),  # Red Glazed Terracotta
     191: (250, 0),  # Black Glazed Terracotta
-    # コンクリート系 (192-223)
     192: (251, 0),  # White Concrete
     193: (251, 1),  # Orange Concrete
     194: (251, 2),  # Magenta Concrete
@@ -233,7 +223,6 @@ BLOCK_MAPPING = {
     221: (252, 13),  # Green Concrete Powder
     222: (252, 14),  # Red Concrete Powder
     223: (252, 15),  # Black Concrete Powder
-    # ネザー系 (224-238)
     224: (87, 0),  # Netherrack
     225: (88, 0),  # Soul Sand
     226: (89, 0),  # Glowstone
@@ -249,7 +238,6 @@ BLOCK_MAPPING = {
     236: (84, 0),  # Jukebox
     237: (25, 0),  # Note Block
     238: (23, 0),  # Dispenser
-    # エンド系・特殊ブロック (239-255)
     239: (116, 0),  # Enchanting Table
     240: (121, 0),  # End Stone
     241: (206, 0),  # End Stone Bricks

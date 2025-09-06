@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import time
 from pathlib import Path
@@ -10,17 +9,19 @@ import faiss
 import nbtlib
 import numpy as np
 from langchain_aws import BedrockEmbeddings
-from langchain_text_splitters import MarkdownTextSplitter
 from mcpi import block as Block
 from mcpi.minecraft import Minecraft
 from mcrcon import MCRcon
 from tqdm import tqdm
 
-from mappings import BLOCK_MAPPING, REVERSE_BLOCK_MAPPING
+from .mappings import BLOCK_MAPPING, REVERSE_BLOCK_MAPPING
 
 DEFAULT_ORIGIN_X = 0
 DEFAULT_ORIGIN_Y = 50
 DEFAULT_ORIGIN_Z = 0
+
+# NOTE: mcpi.blockには一部のブロックしか定義されていないため、ドロッパーだけ自前で定義する
+DROPPER = Block.Block(158)
 
 
 class MinecraftVectorStore:
@@ -28,35 +29,18 @@ class MinecraftVectorStore:
         self,
         host: str,
         password: str,
-        mc_port: int = 4711,
-        mcr_port: int = 25575,
+        mcpi_port: int = 4711,
+        mcrcon_port: int = 25575,
         ox: int = DEFAULT_ORIGIN_X,
         oy: int = DEFAULT_ORIGIN_Y,
         oz: int = DEFAULT_ORIGIN_Z,
     ):
-        self.mc = Minecraft.create(host, mc_port)
-        self.mcr = MCRcon(host, password, mcr_port)
-        self.mcr.connect()
-
-        self.ox = ox
-        self.oy = oy
-        self.oz = oz
-
-        self.chunks = []
-        self.index = None
-
-        commands_path = Path(__file__).parent / "commands"
-        with open(commands_path / "setDropper.mcfunction") as f:
-            self.set_dropper_command_template = Template(f.read())
-
-        with open(commands_path / "getDropperData.mcfunction") as f:
-            self.get_dropper_data_command_template = Template(f.read())
-
-    def build(self, chunks: list[str]):
-        self.chunks = chunks
+        self.mcpi = Minecraft.create(host, mcpi_port)
+        self.mcrcon = MCRcon(host, password, mcrcon_port)
+        self.mcrcon.connect()
 
         client = boto3.client("bedrock-runtime", "us-east-1")
-        embedding_model = BedrockEmbeddings(
+        self.embedding_model = BedrockEmbeddings(
             client=client,
             model_id="amazon.titan-embed-text-v2:0",
             model_kwargs={
@@ -65,9 +49,26 @@ class MinecraftVectorStore:
             },
         )
 
+        self.ox = ox
+        self.oy = oy
+        self.oz = oz
+
+        self.chunks = []
+        self.index = None
+
+        mcfunctions_path = Path(__file__).parent / "mcfunctions"
+        with open(mcfunctions_path / "setDropper.mcfunction") as f:
+            self.set_dropper_command_template = Template(f.read())
+
+        with open(mcfunctions_path / "getDropperData.mcfunction") as f:
+            self.get_dropper_data_command_template = Template(f.read())
+
+    def build(self, chunks: list[str]):
+        self.chunks = chunks
+
         print("● Creating vectors...")
 
-        vectors = [embedding_model.embed_query(chunk) for chunk in tqdm(chunks)]
+        vectors = [self.embedding_model.embed_query(chunk) for chunk in tqdm(chunks)]
         vectors = np.array(vectors, dtype=np.float32)
 
         self.index = faiss.IndexFlatL2(256)
@@ -86,7 +87,7 @@ class MinecraftVectorStore:
             # NOTE: 宙に浮けないブロックを支えるための土台(ガラス)を設置
             for x in range(32):
                 for z in range(32):
-                    self.mc.setBlock(
+                    self.mcpi.setBlock(
                         self.ox + x_grid + x,
                         self.oy + y_grid,
                         self.oz + z_grid + z,
@@ -97,7 +98,7 @@ class MinecraftVectorStore:
             comps = vectors[i].tobytes()
             for j, comp in enumerate(comps):
                 id, data = BLOCK_MAPPING[comp]
-                self.mc.setBlock(
+                self.mcpi.setBlock(
                     self.ox + x_grid + j % 32,
                     self.oy + y_grid + 1,
                     self.oz + z_grid + j // 32,
@@ -105,6 +106,7 @@ class MinecraftVectorStore:
                     data,
                 )
 
+            # FIXME: 少し待ってドロッパーがガラスで上書きされないようにする
             time.sleep(1)
 
             # NOTE: ガラスの土台の角にチャンクを格納するドロッパーを配置する
@@ -120,7 +122,7 @@ class MinecraftVectorStore:
                     ensure_ascii=False,
                 ),
             )
-            self.mcr.command(command)
+            self.mcrcon.command(command)
 
         print("● Success to create index.")
 
@@ -139,13 +141,13 @@ class MinecraftVectorStore:
             x_grid = ((i // 8) % 8) * (32 + gap)
             z_grid = (i // 64) * (32 + gap)
 
-            # NOTE: ドロッパーの有無でチャンクが存在するかどうか判定する
-            id = self.mc.getBlock(
+            # NOTE: ドロッパーの有無でチャンクが存在するかどうかを判定する
+            id = self.mcpi.getBlock(
                 self.ox + x_grid,
                 self.oy + y_grid,
                 self.oz + z_grid,
             )
-            if id != 158:
+            if id != DROPPER.id:
                 break
 
             # NOTE: チャンクが格納されているドロッパーの情報を読み取る
@@ -154,7 +156,7 @@ class MinecraftVectorStore:
                 y=self.oy + y_grid,
                 z=self.oz + z_grid,
             )
-            response = self.mcr.command(command)
+            response = self.mcrcon.command(command)
 
             prefix = "The data tag did not change: "
             nbt = nbtlib.parse_nbt(response.replace(prefix, ""))
@@ -169,7 +171,7 @@ class MinecraftVectorStore:
                 x = j % 32
                 z = j // 32
 
-                block = self.mc.getBlockWithData(
+                block = self.mcpi.getBlockWithData(
                     self.ox + x_grid + x,
                     self.oy + y_grid + 1,
                     self.oz + z_grid + z,
@@ -194,27 +196,18 @@ class MinecraftVectorStore:
 
         print("● Success to load index.")
 
-    def get_vector(self, i: int):
-        vectors = self.index.reconstruct(i)  # type: ignore
-        return np.array(vectors, dtype=np.float32)
+    def exists(self) -> bool:
+        # NOTE: オリジンとして指定された座標にドロッパーがあるかどうかを確認する
+        id = self.mcpi.getBlock(
+            self.ox,
+            self.oy,
+            self.oz,
+        )
+        return id != DROPPER.id
 
+    def retrieve(self, query: str, k: int) -> list[str]:
+        embedding = self.embedding_model.embed_query(query)
+        embedding = np.array([embedding], dtype="float32")
 
-if __name__ == "__main__":
-    # source = Path("assets/source.txt").read_text()
-
-    # splitter = MarkdownTextSplitter(
-    #     chunk_size=256,
-    #     chunk_overlap=0,
-    # )
-    # chunks = splitter.split_text(source)[:3]
-
-    mvc = MinecraftVectorStore(
-        host=os.environ["MINECRAFT_HOST"],
-        password=os.environ["MINECRAFT_PASSWORD"],
-    )
-    # mvc.build(chunks)
-
-    mvc.load()
-    # vector = mvc.get_vector(0)
-    # print(vector)
-    print(mvc.chunks)
+        _, indices = self.index.search(embedding, k=k)  # type: ignore
+        return [self.chunks[i] for i in indices[0]]
