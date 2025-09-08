@@ -1,6 +1,5 @@
 import json
 import re
-import time
 from pathlib import Path
 from string import Template
 
@@ -19,8 +18,9 @@ DEFAULT_ORIGIN_X = 0
 DEFAULT_ORIGIN_Y = 50
 DEFAULT_ORIGIN_Z = 0
 
-# NOTE: mcpi.blockには一部のブロックしか定義されていないため、ドロッパーだけ自前で定義する
+# NOTE: mcpi.blockには一部のブロックしか定義されていないため、不足しているブロックを追加で定義する
 DROPPER = Block.Block(158)
+SEA_LANTERN = Block.Block(169)
 
 
 class MinecraftVectorStore:
@@ -89,9 +89,27 @@ class MinecraftVectorStore:
             x_grid = ((i // 8) % 8) * (32 + gap)
             z_grid = (i // 64) * (32 + gap)
 
+            # NOTE: ガラスの土台の角にチャンクを格納するドロッパーを配置する
+            command = self.set_dropper_command_template.substitute(
+                x=self.ox + x_grid,
+                y=self.oy + y_grid,
+                z=self.oz + z_grid,
+                tag=json.dumps(
+                    {
+                        "title": f"Chunk {i + 1}",
+                        "pages": [re.sub(r"\s+", "", chunk)],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            self.mcrcon.command(command)
+
             # NOTE: 宙に浮けないブロックを支えるための土台(ガラス)を設置
             for x in range(32):
                 for z in range(32):
+                    if x == 0 and z == 0:
+                        continue
+
                     self.mcpi.setBlock(
                         self.ox + x_grid + x,
                         self.oy + y_grid,
@@ -110,24 +128,6 @@ class MinecraftVectorStore:
                     id,
                     data,
                 )
-
-            # FIXME: 少し待ってドロッパーがガラスで上書きされないようにする
-            time.sleep(1)
-
-            # NOTE: ガラスの土台の角にチャンクを格納するドロッパーを配置する
-            command = self.set_dropper_command_template.substitute(
-                x=self.ox + x_grid,
-                y=self.oy + y_grid,
-                z=self.oz + z_grid,
-                tag=json.dumps(
-                    {
-                        "title": f"Chunk {i + 1}",
-                        "pages": [re.sub(r"\s+", "", chunk)],
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-            self.mcrcon.command(command)
 
         print("● Success to create index.")
 
@@ -208,10 +208,53 @@ class MinecraftVectorStore:
             self.oy,
             self.oz,
         )
-        return id != DROPPER.id
+        return id == DROPPER.id
 
-    def retrieve(self, query: str, k: int) -> list[str]:
+    def retrieve(self, query: str, k: int, show_overworld: bool = False) -> list[str]:
         embedding = np.array([self._embed(query)], dtype="float32")
         _, indices = self.index.search(embedding, k=k)  # type: ignore
 
+        if show_overworld:
+            self._highlight_chunks(indices[0])
+            input("Press Enter to turn off the glow...")
+            self._restore_chunks(indices[0])
+
         return [self.chunks[i] for i in indices[0]]
+
+    def _highlight_chunks(self, chunk_indices: list[int]):
+        for chunk_idx in chunk_indices:
+            gap = 2
+            y_grid = (chunk_idx % 8) * 4
+            x_grid = ((chunk_idx // 8) % 8) * (32 + gap)
+            z_grid = (chunk_idx // 64) * (32 + gap)
+
+            # ガラス土台をシーランタンに置き換え（角のドロッパーは除外）
+            for x in range(32):
+                for z in range(32):
+                    if x == 0 and z == 0:
+                        continue
+                    self.mcpi.setBlock(
+                        self.ox + x_grid + x,
+                        self.oy + y_grid,
+                        self.oz + z_grid + z,
+                        SEA_LANTERN,
+                    )
+
+    def _restore_chunks(self, chunk_indices: list[int]):
+        for chunk_idx in chunk_indices:
+            gap = 2
+            y_grid = (chunk_idx % 8) * 4
+            x_grid = ((chunk_idx // 8) % 8) * (32 + gap)
+            z_grid = (chunk_idx // 64) * (32 + gap)
+
+            # シーランタンをガラスに戻す（角のドロッパーは除外）
+            for x in range(32):
+                for z in range(32):
+                    if x == 0 and z == 0:
+                        continue
+                    self.mcpi.setBlock(
+                        self.ox + x_grid + x,
+                        self.oy + y_grid,
+                        self.oz + z_grid + z,
+                        Block.GLASS,
+                    )

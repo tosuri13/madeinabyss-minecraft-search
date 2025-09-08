@@ -24,13 +24,13 @@ if __name__ == "__main__":
             chunk_size=256,
             chunk_overlap=0,
         )
-        chunks = [chunk.text for chunk in chunker.chunk(source)]
+        chunks = [chunk.text for chunk in chunker.chunk(source)][:40]
         mvc.build(chunks)
 
     @tool
     def semantic_search(query: str):
         """自然言語で入力されたクエリを利用して、メイドインアビスに関するドキュメントをセマンティックに検索します"""
-        return mvc.retrieve(query, k=3)
+        return mvc.retrieve(query, k=3, show_overworld=True)
 
     agent = Agent(
         model=BedrockModel(
