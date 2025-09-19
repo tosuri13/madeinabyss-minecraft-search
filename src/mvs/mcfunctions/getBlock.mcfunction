@@ -1,0 +1,1 @@
+/data get block $x $y $z

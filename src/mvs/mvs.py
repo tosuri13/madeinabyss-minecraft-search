@@ -7,20 +7,14 @@ import boto3
 import faiss
 import nbtlib
 import numpy as np
-from mcpi import block as Block
-from mcpi.minecraft import Minecraft
 from mcrcon import MCRcon
 from tqdm import tqdm
 
 from .mappings import MVS_BLOCK_MAP, MVS_BLOCK_RMAP
 
 DEFAULT_ORIGIN_X = 0
-DEFAULT_ORIGIN_Y = 50
+DEFAULT_ORIGIN_Y = 0
 DEFAULT_ORIGIN_Z = 0
-
-# NOTE: mcpi.blockには一部のブロックしか定義されていないため、不足しているブロックを追加で定義する
-DROPPER = Block.Block(158)
-SEA_LANTERN = Block.Block(169)
 
 
 class MinecraftVectorStore:
@@ -28,14 +22,12 @@ class MinecraftVectorStore:
         self,
         host: str,
         password: str,
-        mcpi_port: int = 4711,
-        mcrcon_port: int = 25575,
+        port: int = 25575,
         ox: int = DEFAULT_ORIGIN_X,
         oy: int = DEFAULT_ORIGIN_Y,
         oz: int = DEFAULT_ORIGIN_Z,
     ):
-        self.mcpi = Minecraft.create(host, mcpi_port)
-        self.mcrcon = MCRcon(host, password, mcrcon_port)
+        self.mcrcon = MCRcon(host, password, port)
         self.mcrcon.connect()
 
         self.bedrock_client = boto3.client("bedrock-runtime", "us-east-1")
@@ -47,12 +39,14 @@ class MinecraftVectorStore:
         self.chunks = []
         self.index = None
 
-        mcfunctions_path = Path(__file__).parent / "mcfunctions"
-        with open(mcfunctions_path / "setDropper.mcfunction") as f:
-            self.set_dropper_command_template = Template(f.read())
+        def read_template(funcname: str):
+            mcfunctions_path = Path(__file__).parent / "mcfunctions"
+            with open(mcfunctions_path / f"{funcname}.mcfunction") as f:
+                return Template(f.read())
 
-        with open(mcfunctions_path / "getDropperData.mcfunction") as f:
-            self.get_dropper_data_command_template = Template(f.read())
+        self.get_block_template = read_template("getBlock")
+        self.set_block_template = read_template("setBlock")
+        self.set_dropper_template = read_template("setDropper")
 
     def _embed(self, query: str):
         response = self.bedrock_client.invoke_model(
@@ -68,16 +62,24 @@ class MinecraftVectorStore:
 
         return response["embedding"]
 
+    def _get_block(self, x, y, z):
+        command = self.get_block_template.substitute(x=x, y=y, z=z)
+        return self.mcrcon.command(command)
+
+    def _set_block(self, x, y, z, block):
+        command = self.set_block_template.substitute(x=x, y=y, z=z, block=block)
+        return self.mcrcon.command(command)
+
     def build(self, chunks: list[str]):
         self.chunks = chunks
 
         print("● Creating vectors...")
 
-        vectors = [self._embed(chunk) for chunk in tqdm(chunks)]
-        vectors = np.array(vectors, dtype=np.float32)
+        # vectors = [self._embed(chunk) for chunk in tqdm(chunks)]
+        # vectors = np.array(vectors, dtype=np.float32)
 
-        self.index = faiss.IndexFlatL2(256)
-        self.index.add(vectors)  # type: ignore
+        # self.index = faiss.IndexFlatL2(256)
+        # self.index.add(vectors)  # type: ignore
 
         print("● Build index in your Minecreft World...")
 
@@ -90,15 +92,13 @@ class MinecraftVectorStore:
             z_grid = (i // 64) * (32 + gap)
 
             # NOTE: ガラスの土台の角にチャンクを格納するドロッパーを配置する
-            command = self.set_dropper_command_template.substitute(
+            # FIXME: ここだけ_set_block使ってないのが気になる
+            command = self.set_dropper_template.substitute(
                 x=self.ox + x_grid,
                 y=self.oy + y_grid,
                 z=self.oz + z_grid,
                 tag=json.dumps(
-                    {
-                        "title": f"Chunk {i + 1}",
-                        "pages": [re.sub(r"\s+", "", chunk)],
-                    },
+                    {"pages": [re.sub(r"\s+", "", chunk)]},
                     ensure_ascii=False,
                 ),
             )
@@ -110,24 +110,24 @@ class MinecraftVectorStore:
                     if x == 0 and z == 0:
                         continue
 
-                    self.mcpi.setBlock(
-                        self.ox + x_grid + x,
-                        self.oy + y_grid,
-                        self.oz + z_grid + z,
-                        Block.GLASS,
+                    self._set_block(
+                        x=self.ox + x_grid + x,
+                        y=self.oy + y_grid,
+                        z=self.oz + z_grid + z,
+                        block="minecraft:glass",
                     )
 
-            # NOTE: ベクトルを構成するバイト列ごとに対応するブロックを配置する
-            comps = vectors[i].tobytes()
-            for j, comp in enumerate(comps):
-                id, data = MVS_BLOCK_MAP[comp]
-                self.mcpi.setBlock(
-                    self.ox + x_grid + j % 32,
-                    self.oy + y_grid + 1,
-                    self.oz + z_grid + j // 32,
-                    id,
-                    data,
-                )
+            # # NOTE: ベクトルを構成するバイト列ごとに対応するブロックを配置する
+            # comps = vectors[i].tobytes()
+            # for j, comp in enumerate(comps):
+            #     id, data = MVS_BLOCK_MAP[comp]
+            #     self.mcpi.setBlock(
+            #         self.ox + x_grid + j % 32,
+            #         self.oy + y_grid + 1,
+            #         self.oz + z_grid + j // 32,
+            #         id,
+            #         data,
+            #     )
 
         print("● Success to create index.")
 
@@ -156,7 +156,7 @@ class MinecraftVectorStore:
                 break
 
             # NOTE: チャンクが格納されているドロッパーの情報を読み取る
-            command = self.get_dropper_data_command_template.substitute(
+            command = self.get_block_template.substitute(
                 x=self.ox + x_grid,
                 y=self.oy + y_grid,
                 z=self.oz + z_grid,
@@ -200,6 +200,20 @@ class MinecraftVectorStore:
         self.index.add(np.array(vectors, dtype=np.float32))  # type: ignore
 
         print("● Success to load index.")
+
+    def test(self, chunk: str):
+        command = self.set_dropper_template.substitute(
+            x=0,
+            y=0,
+            z=0,
+            tag=json.dumps(
+                {"pages": [re.sub(r"\s+", "", chunk)]},
+                ensure_ascii=False,
+            ),
+        )
+        print(command)
+        res = self.mcrcon.command(command)
+        print(res)
 
     def exists(self) -> bool:
         # NOTE: オリジンとして指定された座標にドロッパーがあるかどうかを確認する

@@ -1,1 +1,0 @@
-/blockdata $x $y $z {}
