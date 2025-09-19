@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.mcfunction": "mcfunction"
+  },
+  "[mcfunction]": {
+    "files.insertFinalNewline": false
+  }
+}
